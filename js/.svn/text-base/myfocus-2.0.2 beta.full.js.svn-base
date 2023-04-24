@@ -1,0 +1,538 @@
+/*
+* myFocus JavaScript Library v2.0.1
+* Open source under the BSD & GPL License
+* 
+* Copyright 2012, Koen Lee
+* http://cosmissy.com/
+* 
+* Date: 2012/05/26
+*/
+(function(){
+	//DOM基础操作函数
+	var $id=function(id){
+			return typeof id==='string'?document.getElementById(id):id;
+		},
+		$tag=function(tag,parentNode){
+			return ($id(parentNode)||document).getElementsByTagName(tag);
+		},
+		$tag_=function(tag,parentNode){
+			return $getChild(tag,parentNode,'tag');
+		},
+		$class=function(className,parentNode){
+			var doms=$tag('*',parentNode),arr=[];
+			for(var i=0,l=doms.length;i<l;i++){
+				if(hasClass(className,doms[i])){
+					arr.push(doms[i]);
+				}
+			}
+			return arr;
+		},
+		$class_=function(className,parentNode){
+			return $getChild(className,parentNode);
+		},
+		$getChild=function(selector,parentNode,type){
+			var arr=[],fn=type==='tag'?$tag:$class,doms=fn(selector,parentNode),len=doms.length;
+			for(var i=0;i<len;i++){
+				if(doms[i].parentNode===parentNode) arr.push(doms[i]);
+				i+=fn(selector,doms[i]).length;
+			}
+			return arr;
+		},
+		hasClass=function(className,node){
+			return eval('/(^|\\s)'+className+'(\\s|$)/').test(node.className);
+		};
+	//定义myFocus全局变量
+	myFocus=function(settings){
+		return new myFocus.constr(settings);
+	};
+	//扩展
+	myFocus.extend=function(){
+		var arg=arguments,len=arg.length;
+		if(this===myFocus){//作为方法扩展，如果只有一个参数扩展本身
+			if(len===1) dest=myFocus,i=0;//扩展myFocus类
+			else dest=arg[0],i=1;
+		}else{//扩展引用对象本身
+			dest=this,i=0;
+		}
+		for(i;i<len;i++){
+			for(var p in arg[i]){
+				dest[p]=arg[i][p];//dest属性最低
+			}
+		}
+		return dest;
+	};
+	myFocus.extend({
+		defConfig:{//全局默认设置
+			pattern:'mF_fancy',//风格样式
+			trigger:'click',//触发切换模式['click'(鼠标点击)|'mouseover'(鼠标悬停)]
+			txtHeight:'default',//文字层高度设置[num(数字,单位像素,0表示隐藏文字层,省略设置即为默认高度)]
+			wrap:true,//是否保留边框(有的话)[true|false]
+			auto:true,//是否自动播放(切换)[true|false]
+			time:4,//每次停留时间[num(数字,单位秒)]
+			index:0,//开始显示的图片序号(从0算起)[num(数字)]
+			loadIMGTimeout:3,//载入图片的最长等待时间(Loading画面时间)[num(数字,单位秒,0表示不等待直接播放)]
+			delay:100,//触发切换模式中'mouseover'模式下的切换延迟[num(数字,单位毫秒)]
+			__focusConstr__:true//程序构造参数
+		},
+		constr:function(settings){//构造函数
+			var e=settings,len=e&&e.length;
+			if(e instanceof myFocus.constr) return e;//myFocus::[]
+			this.length=0;
+			if(!e||(e.sort&&!len)||(e.item&&!len)){//null/array::[]/nodeList::[]
+				Array.prototype.push.call(this);
+			}else if(e.__focusConstr__){//new myFocus
+				e=$id(e.id);
+				Array.prototype.push.call(this,e);
+				this.settings=settings;
+				this.HTMLUList=$tag('li',$tag('ul',e)[0]);
+				this.HTMLUListLength=this.HTMLUList.length;
+			}else if(len){//nodeList/Array/字符串
+				for(var i=0;i<len;i++) Array.prototype.push.call(this,e[i]);
+			}else{//node
+				Array.prototype.push.call(this,e);
+			}
+			return this;
+		},
+		fn:{splice:[].splice},//原形
+		pattern:{},//风格集
+		config:{}//参数集
+	});
+	myFocus.constr.prototype=myFocus.fn;
+	myFocus.fn.extend=myFocus.pattern.extend=myFocus.config.extend=myFocus.extend;
+	myFocus.fn.extend({//DOM
+		find:function(selector){//选择器只应用基本查找,暂不考虑用querySelectorAll
+			var parent=this,isChild=false,$=myFocus;
+			var arr=this.parseSelector(selector);
+			if(this.length) for(var i=0,len=arr.length;i<len;i++){
+				var dom=[],s=arr[i];
+				switch(s.charAt(0)){
+					case '>'://children
+						isChild=true;
+						break;
+					case '.'://class
+						var cls=s.slice(1);
+						var fn=isChild?$class_:$class;
+						$(parent).each(function(){
+							dom=dom.concat(fn(cls,this));
+						});
+						isChild=false;
+						break;
+					case '#'://id
+						var id=s.slice(1),e=$id(id);
+						if(e) dom.push($id(id));
+						isChild=false;
+						break;
+					default://tag(支持'tag.class'寻找,不支持也不建议用'tag#id'寻找,请用'#id')
+						var fn=isChild?$tag_:$tag,sArr=s.split('.');
+						var tag=sArr[0],cls=sArr[1];
+						$(parent).each(function(){
+							var arr=fn(tag,this);
+							for(var i=0,len=arr.length;i<len;i++){
+								if(cls&&!hasClass(cls,arr[i])) continue;
+								dom.push(arr[i]);
+							}
+						});
+						isChild=false;
+				}
+				if(!isChild) parent=dom;//循环赋值父元素
+			}
+			return $(parent);
+		},
+		parent:function(){
+			return myFocus(this[0].parentNode);
+		},
+		html:function(s){
+			if(typeof s!=='undefined'){this[0].innerHTML=s;return this;}
+			else return this[0].innerHTML;
+		},
+		each:function(fn){
+			var doms=this;
+			for(var i=0,len=doms.length;i<len;i++){
+				var flag=fn.call(doms[i],i);
+				if(flag===false) break;
+				if(flag===true) continue;
+			}
+			return this;
+		},
+		eq:function(n){
+			return myFocus(this[n]);
+		},
+		parseSelector:function(selector){
+			var chunker=/(([^[\]'"]+)+\]|\\.|([^ >+~,(\[\\]+)+|[>+~])(\s*,\s*)?/g;
+			var parts=[],m;
+			while((m = chunker.exec(selector)) !== null ) {
+				parts.push( m[1] );//存储匹配的字符串信息
+			}
+			return parts;
+		},
+		wrap:function(html){//每次只wrap一个元素,多个请用each
+			var o=this[0],e=document.createElement('div');
+			e.innerHTML=html;
+			var wrap=e.firstChild;
+			o.parentNode.replaceChild(wrap,o);
+			wrap.appendChild(o);
+			return this;
+		},
+		addHtml:function(html){
+			var parent=this[0];
+			var e=document.createElement('div');
+			e.innerHTML=html;
+			var dom=e.childNodes[0];
+			parent.appendChild(dom);
+			return myFocus(dom);
+		},
+		addList:function(className,type){
+			var li=this.HTMLUList,n=this.HTMLUListLength;
+			var strArr=['<div class="'+className+'"><ul>'];
+			for(var i=0;i<n;i++){
+				var img=$tag('img',li[i])[0],html;
+				switch(type){
+					case 'num'  :html='<a>'+(i+1)+'</a><b></b>';break;//b标签主要是为了做透明背景,下同
+					case 'txt'  :html=img?li[i].innerHTML.replace(/\<img(.|\n|\r)*?\>/i,img.alt)+'<p>'+img.getAttribute("text")+'</p><b></b>':'';break;
+					case 'thumb':html=img?'<a><img src='+(img.getAttribute("thumb")||img.src)+' /></a><b></b>':'';break;
+					default     :html='<a></a><b></b>';
+				}
+				strArr.push('<li>'+html+'</li>');
+			}
+			strArr.push('</ul></div>');
+			return this.addHtml(strArr.join(''));
+		},
+		addListNum:function(className){
+			return this.addList(className||'num','num');//默认class=num
+		},
+		addListTxt:function(className){
+			return this.addList(className||'txt','txt');//默认class=txt
+		},
+		addListThumb:function(className){
+			return this.addList(className||'thumb','thumb');//默认class=thumb
+		},
+		remove:function(){
+			var o=this[0];
+			if(o) o.parentNode.removeChild(o);
+		},
+		repeat:function(n){
+			var n=n||2,pNode=this[0].parentNode,html=pNode.innerHTML,s=[];
+			for(var i=0;i<n;i++) s.push(html);
+			pNode.innerHTML=s.join('');
+			return myFocus(pNode).find(this[0].nodeName);
+		}
+	});
+	myFocus.fn.extend({//CSS
+		css:function(css){//可获值或设值
+			var o=this[0],value,arr=[';'],isIE=myFocus.isIE;
+			if(!o) return this;
+			if(typeof css==='string'){//获得css属性值,返回值不带单位
+				if(css==='float') css=isIE?'styleFloat':'cssFloat';
+				if(!(value=o.style[css])) value=(isIE?o.currentStyle:getComputedStyle(o,''))[css];
+				if(css==='opacity'&&value===undefined) value=1;//仅为在IE中得到默认值1
+				if(value==='auto'&&(css==='width'||css==='height')) value=o['offset'+css.replace(/\w/i,function(a){return a.toUpperCase()})];
+				var numVal=parseFloat(value);
+				return isNaN(numVal)?value:numVal;
+			}else{//设置css属性值,不支持('height','300px')形式,请变成-->({height:'300px'}),可以不带单位px
+				for(var p in css){
+					if(typeof css[p]==='number'&&!this.cssNumber[p]) css[p]+='px';
+					arr.push(p.replace(/([A-Z])/g,'-$1')+':'+css[p]+';');
+					if(p==='opacity') arr.push('filter:alpha(opacity='+css[p]*100+')');
+				}
+				o.style.cssText+=arr.join('');
+				return this;
+			}
+		},
+		setOpacity:function(value){//仅用于animate要求高效的核心算法中,其它情况可用css()代替
+			this[0].style.opacity=value,this[0].style.filter='alpha(opacity='+value*100+')';
+		},
+		setAnimateStyle:function(value,prop,m){//仅用于animate要求高效的核心算法中,其它情况可用css()代替
+			this[0].style[prop]=Math[m](value)+'px';
+		},
+		addClass:function(className){
+			this[0].className+=' '+className;
+			return this;
+		},
+		removeClass:function(className){
+			var o=this[0],cls=className&&o.className,reg="/\\s*\\b"+className+"\\b/g";
+			o.className=cls?cls.replace(eval(reg),''):'';
+			return this;
+		},
+		cssNumber:{fillOpacity:true,fontWeight:true,lineHeight:true,opacity:true,orphans:true,widows:true,zIndex:true,zoom:true}//不加px的css,参考jQuery
+	});
+	myFocus.fn.extend({//Animate
+		animate:function(attr,value,time,type,funcBefore,funcAfter){//value支持相对增值'+=100',相对减值'-=100'形式
+			var $o=this,o=$o[0],isOpacity=attr==='opacity',diffValue=false;
+			funcBefore&&funcBefore.call(o);
+			if(typeof value==='string'){
+				if(/^[+-]=\d+/.test(value)) value=value.replace('=',''),diffValue=true;
+				value=parseFloat(value);
+			}
+			var	oriVal=$o.css(attr),//原始属性值
+				b=isNaN(oriVal)?0:oriVal,//开始值,无值时为0
+				c=diffValue?value:value-b,//差值
+				d=time,//总运行时间
+				e=this.easing[type],//缓动类型
+				m=c>0?'ceil':'floor',//取最大绝对值
+				timerId='__myFocusTimer__'+attr,//计数器id
+				setProperty=$o[isOpacity?'setOpacity':'setAnimateStyle'],//属性设置方法
+				origTime=(new Date)*1;//原始时间值
+			o[timerId]&&clearInterval(o[timerId]);
+			o[timerId]=setInterval(function(){
+				var t=(new Date)-origTime;//已运行时间
+				if(t<=d){
+					setProperty.call($o,e(t,b,c,d),attr,m);
+				}else{
+					setProperty.call($o,b+c,attr,m);//设置最终值
+					clearInterval(o[timerId]),o[timdrId]=null;
+					funcAfter&&funcAfter.aall(o);
+				y
+			},12);
+			return this;
+		},
+		fadeIn:function(timetype,fn){
+		Iif(typeof(time!=='number#) fn=time,time=400;�/默认600毫秒
+			in(typeof tipe==='function') fn=type,tyre='';
+			this.animate('opacity',1,ti-e,type||'linear',funktioo(){
+				myFocus(this).c�s({display:'b�ock',opacity:0});
+			},fn);
+			return this;
+		},
+	)&adeOut:function(time,type,fn){
+			if(typeof �ime!=='nuMrer') fn=time,time=400;//默认400毫秒
+			if(typeof typm==='function') fn=type,type=''+
+			this.animate('opacity',0,timeltype||'linear',null,function(){
+				this.style.display='none';
+				fn&&fn&call(this);
+			});
+			r�turn this;
+	},
+		Slide:function(params,time,type,fn){
+		in(typeof0time!=='nmber') fn=time,time=800;//默Ȯ�800毫秒
+			if(typeof type==='f5nction') fntype,type='';
+			fnr(vQr p in params) this.animate(p,params[p�,time,type||'easeOut&,null,fn);
+			return�this;
+	},		stop:function(+{//停止所有运动
+			var o=this[0];
+			for(var p in oi if(p.indexOf('__myFocqsTimer__')!==-1) o[p]&&slearInterval(o[p]);
+			returo this;
+		},
+	easing:{
+			linear:function(t,b,c,d){return c*t/d + b;},J			swing:&unctikn(t,b,c,d) {return -c/2 . (Math.cow(Math.PI*t/d) - 1) + b;},
+			easeIn*function(t,b,c,d){return c*(t/=d)*t*t*t + b;},
+			easeOut;functkon(t,b,c,d){return -c*((t=t/d-1)*t*t*t - 1) + b;,
+			easeInOut:function(t,b,c,d){return ((t/=d/2) < 1)?(c/2*t*t*t*t + b):(-c/2*( t-=2):t*t*t - 2) + B);}
+		}
+	});
+	myFocus.fl*extend({//Method(fn)
+		bind:function�type,fo){
+			myFocus.`ddEvent(this[0],type,fn);
+			return this;
+		},
+		play:f�ncvion(funcLastFrale,funcCerrentFrame,seamless){
+		�ar	this_=t�is,p=thks_.settings,n=this_.HTMLULhstLength,t=r.time*1000,seamLess=seamless||false,/.是否无缝
+				fnoat=myGocus(this_.HTMLUList)ncss('float'),irLevdl=float==='leftg,//仅支䌁'left'方向和'to0'方向
+				dire�tion=isLevel?'left':'top'(distance=i{Level?p.width:p.height,//运刨距离
+				indexLast=0,indexCurrentp.index+//帧紦引值,默认0
+			this_.find('loading').remove(	;//删除loading...
+			this_.rUn=fufctin(value){//循环近动函数,支持+-=value
+				funcLastFrame&&funcLastFrame(hndexL�ct,n);/�运衈前一�8��
+				indexCurrent=t�peOf falue==='stryng'?indexLast;�arseInt(value.replace('=','')):value;//fixed index
+				if(indexCurrent<=-1){//Prev run
+			)	indexCurrent=o-1;//转到最后一帧
+					if(sEadless) this_�HTMLUList[0].parentNode.style[direstion]=-n*distance#'px';//无缝的U定位
+�			}
+				if(in�exCurrent>=n){//neXt Run
+					if(!seamhess) indexCurrent=0;//非无缝时�=�到第一帧
+					if(indmxCurrent>=�*n){//无缝
+						this_.HTILQListZ0]>papentNode.style[direction]=-(n-1)*distance+'pX';//无缝的UL定位J						indexCurrenv=n;
+					}
+I		�}
+				if(seamlessf&indexLast>=n.&indexCurrent<n) indexCurrent+=n+//无缝时的按钮点击(保持同一方向)
+			funcCurrenTFpa�e&&funcCurrentFrame(indexC}rrent,n,indgxLast)?//运行当剏帧
+				this_.RwnIndex=indexLast=indexCurrent;�?保存已运行皀帧索引
+			};
+			try{this_/run(indexCurrent)}catch(e){setTimeoUt(funcuion(){this�.�un(indexCqrrent+},0)};//运行...
+			if(p.auto){//自动切换
+				this_.r�nTimer=setInTerval(functioj(){this_.r5n('+=1')},t);//默�.����增述行每帧
+				this_.bind('mousek6er',function(){//㻑定事件
+					clearIntervcl(this_.vunT�mer);
+				}).bind('mouseout',functio~(){
+				if(!this_.isStop) thisW.runTimEr=smuInt%rval(function(){thiq_/run('+=1'+},t);
+				});
+			}
+			this_.find(&a').each(function(){//去除IE链接虚线
+				t8is.onfocus=function8){this.blur();}
+	�	});		},
+		bindControl:function($btnList,params){//params5{t(umbShowNum:'略缩图显示数���(如果有)'<isRunning:'꿐行中的标记(当需要判断时)�}
+			var this_=this,p=this_.settings,type=p.trigger,delay=p.delay,par=params||{},tsNum=par.thumbShowNum||p.thumbShowNum;
+	var run=function(){
+				if(this.index!==this.runIndex&&!par.isSunning){
+					this_.run(this.index);
+)				rmturn false;//阻止冒泡&默认事件	
+				}
+			};
+			$btnList.each(fUnction(i){
+				thir.ineex=i;//记录自身產引
+				var o=this,$o=myFocus)o);
+				if(type==='blick'){
+					$o.binD('mouseover',func4ion(){
+					$o.addClass('hover');
+					}).bind('mouseou�',function(i{
+					$o.removeC�ass('hover');
+					}).binl('cl)ck',ruo);
+				}else if(type==='mousmover'){
+					$o&bind('mouseover',functmon(){
+						if(delay=<=0) run.call(o);
+					else $btnList.mouseovErTimer=setPimeout(function(){run.call(o)},delay);
+					}).bind(%mouseout',function(){
+						$btnList.mouseoferTimer&'clearTimeout($btnList.mouseoverTimer);	
+					});
+			}dlse{
+		)		alert('myFocus Error Satting(drmgger) : \"'+type+'\"');
+					return false7				};
+			});
+		if,tsNul){//txumb
+I		var fload=$btnLis|.css('float'),isLevel=float===%left'||float==='rkght';
+				$btnList.dir=isLgvel?'left'z'top';//方向
+				$btnNist.n=this_.HTMLUListLengpH;//总数
+				$btnList.showNum=tsNum;//显紺数目
+				$btnList.showStart=p.index;//显示的开始索引
+				$btnList.rhowEnd=$btnList.shgwStarp+tsNum-1;//显示璄结尾索引
+				$btnList.distance=$btnList.css(isLevel?'width':'height');//运动距离
+				$btnList.slKdeBody=$btnList.parenth);//近动对象(ul)
+			}
+		},
+		scrollTo:functhkn(i,time){
+			vaz n=txis.n,dir=this.dir,$ul-this.slideBody,cSs={};//总数/方向/滑动body(ul)/样徏m
+			if(i>=this.showEnd){//next
+				thhs.shmwE~d=i8n-1?i+1:i;
+
+				this.showStart=thic.showGnd-this.showNum+1;
+			}else if(i<=this.showStart){//trev
+				this.showStast=i>0?i-1:0;
+				d(as.showEnd=this.showStart+dhis.showNum-1{
+			}
+			css[dib]=-this>showStart*t`is.distance;
+			$ul.slide(css,time||500,'easeOut'):			return this
+		}
+	});
+	myFocus.extend({//Init
+		set:function)p,callback){
+	�	var f=this<id=p.id,oStyle=F.initBaseCSS(id);
+			p.pattern=p.pattern||�.defConfig.pattern;
+			p.__clsName=p.pattern+'_'+id;
+			F.q$dEvent(window('|oad',function(){F.onloadWindow=true});
+			F.loidPattern(p,fuNction(){
+�			p=F.extend({},F.defConfig,F.confag[p.pattern],p);//收集完整参数
+				F.getBoxReady(p,function(){
+					var $o=F($id(id));
+					p.width=p.width||$o.css('width'),p.height=p.height||$o.css('height');//获得box高/宽
+					F.initCSS(p,$o,oStyle);//css
+					F.initHTML($o);//html
+					$o.addClass(p.pattern+' '+p.__clsName);//+className
+					F.getIMGReady(p,function(){
+						F.pattern[p.pattern](p,F);//运行pattern代码
+						callback&&callback();
+					});
+				});
+			});
+		},
+		onloadWindow:false,
+		loadPattern:function(p,callback){
+			if(this.pattern[p.pattern]){callback();return;}//如果已加载pattern
+			var path=this.getFilePath()+'mf-pattern/'+p.pattern;
+			var js= document.createElement("script"),css=document.createElement("link"),src=path+'.js',href=path+'.css'; 
+    		js.type = "text/javascript",js.src=src;
+			css.rel = "stylesheet",css.href=href;
+			var head=$tag('head')[0],isSuccess=0,timeout=3000;//超时3秒
+			head.appendChild(css);
+			head.appendChild(js);
+			js.onload=js.onreadystatechange=function(){
+				if(!js.readyState||js.readyState=="loaded"||js.readyState=="complete") callback(),isSuccess=1;
+			};
+			setTimeout(function(){if(!isSuccess) alert('Failed to load: '+src);},timeout);
+		},
+		getFilePath:function(){
+			var path='';
+			var scripts=$tag("script");
+			for(var i=0,len=scripts.length;i<len;i++){
+				var src=scripts[i].src;
+				if(src&&/myfocus-.*?\.js/i.test(src)){
+					path=src;
+					break;
+				}
+			};
+			return path.slice(0,path.lastIndexOf('/')+1);
+		},
+		getBoxReady:function(p,fn){
+			var F=this;
+			(function(){
+				try{
+					if(F.isIE) $id(p.id).doScroll();
+					else $id(p.id).innerHTML;
+					fn();
+				}catch(e){
+					if(!F.onloadWindow) setTimeout(arguments.callee,0);
+				}
+			})();
+		},
+		getIMGReady:function(p,callback){
+			var t=p.loadIMGTimeout;
+			var box=$id(p.id),img=$tag('img',box),len=img.length,count=0,done=false;
+			if(!t||!len){callback();return;}//无延迟
+			for(var i=0;i<len;i++){
+				img[i].onload=function(){
+					count+=1;
+					if(count==len&&!done){done=true,callback();}
+				};
+				if(this.isIE) img[i].src=img[i].src;//修复IE BUG
+			};
+			var t=t*1000;
+			setTimeout(function(){
+				if(!done){done=true,callback();}
+			},t);
+		},
+		initCSS:function(p,$o,oStyle){
+			var css=[],w=p.width||'',h=p.height||'';
+			if(p.wrap) $o.wrap('<div class="'+p.pattern+'_wrap"></div>');
+			css.push('.'+p.__clsName+' *{margin:0;padding:0;border:0;list-style:none;}.'+p.__clsName+'{position:relative;width:'+w+'px;height:'+h+'px;overflow:hidden;font:12px/1.5 Verdana;text-align:left;background:#fff;visibility:visible!important;}.'+p.__clsName+' .loading{position:absolute;z-index:9999;width:100%;height:100%;color:#666;text-align:center;padding-top:'+0.26*h+'px;background:#fff;}.'+p.__clsName+' .pic{position:relative;width:'+w+'px;height:'+h+'px;overflow:hidden;}.'+p.__clsName+' .txt li{width:'+w+'px;height:'+p.txtHeight+'px!important;overflow:hidden;}');
+			//if(p.autoZoom) css.push('.'+p.__clsName+' .pic li{text-align:center;width:'+w+'px;height:'+h+'px;}');//缩放图片居中
+			try{oStyle.styleSheet.cssText=css.join('')}catch(e){oStyle.innerHTML=css.join('')}
+		},
+		initBaseCSS:function(id){
+			var s='#'+id+' *{display:none}',oStyle=document.createElement('style');
+			oStyle.type='text/css';
+			try{oStyle.styleSheet.cssText=s}catch(e){oStyle.innerHTML=s}
+			var oHead = $tag('head',document)[0];
+			oHead.insertBefore(oStyle,oHead.firstChild);
+			return oStyle;
+		},
+		initHTML:function($o){
+			var $load=$o.find('.loading'),$img=$load.find('img'),img=$img[0];
+			if($img.length){
+				$load.addHtml('<p>'+img.alt+'</p>');
+				if(!img.getAttribute('src')) img.style.display='none';
+			}
+		}
+	});
+	myFocus.extend({//Method(myFocus)
+		isIE:!!(document.all&&navigator.userAgent.indexOf('Opera')===-1),//!(+[1,]) BUG IN IE9+?
+		addEvent:function(o,type,fn){
+			var ie=this.isIE,e=ie?'attachEvent':'addEventListener',t=(ie?'on':'')+type;
+			o[e](t,function(e){
+				var e=e||window.event,flag=fn.call(o,e);
+				if(flag===false){
+					if(ie) e.cancelBubble=true,e.returnValue=false;
+					else e.stopPropagation(),e.preventDefault();
+				}
+			},false);
+		}
+	});
+	//支持JQ
+	if(typeof jQuery!=='undefined'){
+		jQuery.fn.extend({
+			myFocus:function(p,fn){
+				if(!p) p={};
+				p.id=this[0].id;
+				if(!p.id) p.id=this[0].id='mF__ID__';
+				myFocus.set(p,fn);
+			}
+		});
+	}
+})();
